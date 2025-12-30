@@ -31,7 +31,7 @@ ARRIVE_BY=("ASAP" "STANDARD" "NEXT_DAY")
 # Function to generate random string of digits
 random_digits() {
     local length=$1
-    tr -dc '0-9' </dev/urandom | head -c "$length"
+    LC_CTYPE=C tr -dc '0-9' </dev/urandom | head -c "$length"
 }
 
 # Function to generate random IBAN
