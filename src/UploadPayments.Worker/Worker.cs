@@ -3,6 +3,7 @@ using CsvHelper.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Globalization;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using UploadPayments.Infrastructure.Persistence;
@@ -68,6 +69,7 @@ public sealed class Worker(
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                     """)
+                .OrderBy(x => x.NextRunAtUtc)
                 .FirstOrDefaultAsync(ct);
 
             if (job is null)
@@ -101,6 +103,8 @@ public sealed class Worker(
 
     private async Task RunParseJobAsync(UploadPaymentsDbContext db, PaymentUploadJob job, CancellationToken ct)
     {
+        var sw = Stopwatch.StartNew();
+
         var upload = await db.PaymentUploads.FirstOrDefaultAsync(x => x.Id == job.UploadId, ct);
         if (upload is null)
         {
@@ -215,7 +219,7 @@ public sealed class Worker(
         await db.SaveChangesAsync(ct);
 
         await SucceedJobAsync(db, job, ct);
-        logger.LogInformation("Parsed upload {UploadId}: {TotalRows} rows, {Chunks} chunks", upload.Id, rowNumber, chunkIndex);
+        logger.LogInformation("Parsed upload {UploadId}: {TotalRows} rows, {Chunks} chunks in {ElapsedMs} ms", upload.Id, rowNumber, chunkIndex, sw.Elapsed.TotalMilliseconds);
     }
 
     private async Task<bool> TryRunChunkAsync(UploadPaymentsDbContext db, CancellationToken ct)
@@ -253,6 +257,8 @@ public sealed class Worker(
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                     """)
+                .OrderBy(x => x.UploadId)
+                .ThenBy(x => x.ChunkIndex)
                 .FirstOrDefaultAsync(ct);
 
             if (chunk is null)
@@ -287,6 +293,7 @@ public sealed class Worker(
 
     private async Task RunChunkAsync(UploadPaymentsDbContext db, PaymentUploadChunk chunk, CancellationToken ct)
     {
+        var sw = Stopwatch.StartNew();
         var now = DateTime.UtcNow;
 
         var upload = await db.PaymentUploads.AsNoTracking().FirstOrDefaultAsync(x => x.Id == chunk.UploadId, ct);
@@ -403,6 +410,17 @@ public sealed class Worker(
         await db.SaveChangesAsync(ct);
 
         await TryFinalizeUploadAsync(db, chunk.UploadId, ct);
+
+        logger.LogInformation(
+            "Chunk {ChunkId} upload={UploadId} rows {Start}-{End} processed={Processed} succeeded={Succeeded} failed={Failed} in {ElapsedMs} ms",
+            chunk.Id,
+            chunk.UploadId,
+            chunk.RowStart,
+            chunk.RowEnd,
+            processed,
+            succeeded,
+            failed,
+            sw.Elapsed.TotalMilliseconds);
     }
 
     private async Task TryFinalizeUploadAsync(UploadPaymentsDbContext db, Guid uploadId, CancellationToken ct)

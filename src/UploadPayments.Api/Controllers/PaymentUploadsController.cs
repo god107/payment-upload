@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
+using System.Text.Json;
 using UploadPayments.Api.Contracts;
 using UploadPayments.Infrastructure.Persistence;
 using UploadPayments.Infrastructure.Persistence.Entities;
@@ -170,5 +171,81 @@ public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : Contr
 
         var dto = new UploadErrorsPageDto(uploadId, totalRows, errors.Count, nextCursor, errors);
         return Ok(dto);
+    }
+
+    [HttpGet("{uploadId:guid}/instructions")]
+    [ProducesResponseType(typeof(PaymentInstructionsPageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetInstructions(
+        [FromRoute] Guid uploadId,
+        [FromQuery] Guid token,
+        [FromQuery] int? cursorRow,
+        [FromQuery] int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 2000)
+        {
+            return BadRequest("limit must be between 1 and 2000.");
+        }
+
+        var uploadExists = await db.PaymentUploads
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == uploadId && x.Token == token, cancellationToken);
+
+        if (!uploadExists)
+        {
+            return NotFound();
+        }
+
+        var startRow = cursorRow.GetValueOrDefault(0);
+
+        var rows = await db.PaymentUploadRows
+            .AsNoTracking()
+            .Where(x => x.UploadId == uploadId && x.RowNumber > startRow)
+            .OrderBy(x => x.RowNumber)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        var instructions = rows
+            .Select(x => new PaymentInstructionDto(
+                x.UploadId,
+                x.RowNumber,
+                DeserializeFields(x.MappedFieldsJson),
+                x.ValidationStatus.ToString(),
+                x.ErrorCount,
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc))
+            .ToList();
+
+        var totalRows = await db.PaymentUploads
+            .AsNoTracking()
+            .Where(x => x.Id == uploadId)
+            .Select(x => x.TotalRows)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        int? nextCursor = rows.Count == limit ? rows[^1].RowNumber : null;
+
+        var dto = new PaymentInstructionsPageDto(uploadId, totalRows, instructions.Count, nextCursor, instructions);
+        return Ok(dto);
+    }
+
+    private static IReadOnlyDictionary<string, string?> DeserializeFields(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string?>>(json);
+            return parsed is null
+                ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string?>(parsed, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 }

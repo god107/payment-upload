@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UploadPayments.Infrastructure.Persistence;
@@ -20,6 +21,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddDbContextPool<UploadPaymentsDbContext>(options =>
         {
             options.UseNpgsql(connectionString);
+            options.ConfigureWarnings(w => w.Ignore(CoreEventId.FirstWithoutOrderByAndFilterWarning));
         });
 
         return services;

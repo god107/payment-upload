@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace UploadPayments.Api.Contracts;
 
 public sealed record UploadAcceptedDto(
@@ -35,3 +37,19 @@ public sealed record UploadErrorsPageDto(
     int Returned,
     int? NextCursorRow,
     IReadOnlyList<UploadRowErrorDto> Errors);
+
+public sealed record PaymentInstructionDto(
+    Guid UploadId,
+    int RowNumber,
+    IReadOnlyDictionary<string, string?> Fields,
+    string ValidationStatus,
+    int ErrorCount,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record PaymentInstructionsPageDto(
+    Guid UploadId,
+    int? TotalRows,
+    int Returned,
+    int? NextCursorRow,
+    IReadOnlyList<PaymentInstructionDto> Instructions);
