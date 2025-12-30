@@ -1,0 +1,48 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# User-specific files
+**/*.user
+**/*.userosscache
+**/*.suo
+**/*.userprefs
+
+# VS / VS Code / Rider / JetBrains
+.vs/
+.vscode/
+.idea/
+**/.idea/
+*.sln.iml
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test results
+TestResults/
+
+# NuGet
+**/packages/
+*.nupkg
+*.snupkg
+
+# dotnet tooling caches
+**/.dotnet/
+
+# Local settings (keep appsettings.json in git)
+**/appsettings.Development.json
+
+# ASP.NET Core secrets (local)
+**/secrets.json
+
+# Coverage
+**/coverage*
+**/*.coverage
+**/*.coveragexml
+
+# BenchmarkDotNet
+**/BenchmarkDotNet.Artifacts/

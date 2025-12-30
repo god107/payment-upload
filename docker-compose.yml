@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: upload_payments
+      POSTGRES_PASSWORD: upload_payments
+      POSTGRES_DB: upload_payments
+    ports:
+      - "5432:5432"
+    volumes:
+      - upload_payments_pgdata:/var/lib/postgresql/data
+
+volumes:
+  upload_payments_pgdata:
