@@ -32,6 +32,12 @@ services:
         condition: service_healthy
     ports:
       - "5099:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
   worker:
     build:
@@ -48,6 +54,8 @@ services:
       ValidationWorker__MaxAttempts: 5
       Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
     depends_on:
+      api:
+        condition: service_healthy
       db:
         condition: service_healthy
 
