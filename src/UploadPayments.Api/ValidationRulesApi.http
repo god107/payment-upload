@@ -1,0 +1,364 @@
+@baseUrl = http://localhost:5099
+
+### ═══════════════════════════════════════════════════════════════════════════════
+### VALIDATION RULES API - Sample Calls
+### ═══════════════════════════════════════════════════════════════════════════════
+### This file contains sample API calls for managing validation rules.
+### Validation rules are applied by the Worker during CSV upload processing.
+###
+### Rule Types:
+###   - Required: Ensures field is not empty
+###   - Regex: Validates field matches a pattern
+###   - AllowedValues: Validates field is in a list of allowed values
+###   - DecimalRange: Validates numeric field is within min/max range
+###   - DateFormat: Validates date field matches expected format
+###
+### Rule Scopes:
+###   - Row: Applied at row level (less common)
+###   - Field: Applied to a specific field (most common)
+###
+### Severity:
+###   - Warning: Non-blocking validation issue
+###   - Error: Blocking validation issue (marks row as Invalid)
+### ═══════════════════════════════════════════════════════════════════════════════
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### GET ALL VALIDATION RULES
+### ─────────────────────────────────────────────────────────────────────────────
+### Retrieve all validation rules with pagination
+
+GET {{baseUrl}}/api/validation-rules
+Accept: application/json
+
+### Get only enabled rules
+GET {{baseUrl}}/api/validation-rules?enabled=true
+Accept: application/json
+
+### Get disabled rules
+GET {{baseUrl}}/api/validation-rules?enabled=false
+Accept: application/json
+
+### Paginated request (offset-based)
+GET {{baseUrl}}/api/validation-rules?offset=0&limit=10
+Accept: application/json
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### CREATE VALIDATION RULES - REQUIRED FIELD
+### ─────────────────────────────────────────────────────────────────────────────
+### Create a rule that ensures a field is not empty
+
+# @name createRequiredUniqueReferenceRule
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "UniqueReference",
+    "ruleType": "Required",
+    "parameters": "{}",
+    "severity": "Error",
+    "errorCode": "UNIQUE_REFERENCE_REQUIRED",
+    "errorMessageTemplate": "Unique reference is required and cannot be empty"
+}
+
+### Another required field - Beneficiary Name
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "BeneficiaryName",
+    "ruleType": "Required",
+    "parameters": "{}",
+    "severity": "Error",
+    "errorCode": "BENEFICIARY_NAME_REQUIRED",
+    "errorMessageTemplate": "Beneficiary name is required"
+}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### CREATE VALIDATION RULES - REGEX PATTERN
+### ─────────────────────────────────────────────────────────────────────────────
+### Create a rule that validates field matches a regex pattern
+
+# Validate IBAN format (simplified pattern for demonstration)
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "IbanNumber",
+    "ruleType": "Regex",
+    "parameters": "{\"pattern\": \"^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$\", \"ignoreCase\": true}",
+    "severity": "Error",
+    "errorCode": "INVALID_IBAN_FORMAT",
+    "errorMessageTemplate": "IBAN format is invalid. Expected format: Country code (2 letters) + Check digits (2 numbers) + BBAN"
+}
+
+# Validate BIC/SWIFT code format
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "SwiftCode",
+    "ruleType": "Regex",
+    "parameters": "{\"pattern\": \"^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$\", \"ignoreCase\": true}",
+    "severity": "Error",
+    "errorCode": "INVALID_SWIFT_FORMAT",
+    "errorMessageTemplate": "SWIFT code format is invalid. Expected 8 or 11 characters"
+}
+
+# Validate email format
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "Email",
+    "ruleType": "Regex",
+    "parameters": "{\"pattern\": \"^[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+$\"}",
+    "severity": "Warning",
+    "errorCode": "INVALID_EMAIL_FORMAT",
+    "errorMessageTemplate": "Email format appears to be invalid"
+}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### CREATE VALIDATION RULES - ALLOWED VALUES
+### ─────────────────────────────────────────────────────────────────────────────
+### Create a rule that validates field is in a list of allowed values
+
+# Validate currency code
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "PaymentCurrency",
+    "ruleType": "AllowedValues",
+    "parameters": "{\"values\": [\"GBP\", \"EUR\", \"USD\", \"TRY\"], \"ignoreCase\": true}",
+    "severity": "Error",
+    "errorCode": "INVALID_CURRENCY",
+    "errorMessageTemplate": "Currency must be one of: GBP, EUR, USD, TRY"
+}
+
+# Validate payment method
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "Method",
+    "ruleType": "AllowedValues",
+    "parameters": "{\"values\": [\"SWIFT\", \"SEPA\", \"FASTER_PAYMENTS\", \"ACH\"], \"ignoreCase\": true}",
+    "severity": "Error",
+    "errorCode": "INVALID_PAYMENT_METHOD",
+    "errorMessageTemplate": "Payment method must be one of: SWIFT, SEPA, FASTER_PAYMENTS, ACH"
+}
+
+# Validate country code (ISO 3166-1 alpha-2)
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "Country",
+    "ruleType": "AllowedValues",
+    "parameters": "{\"values\": [\"GB\", \"DE\", \"FR\", \"US\", \"TR\", \"NL\", \"BE\", \"IT\", \"ES\", \"AT\", \"CH\"], \"ignoreCase\": true}",
+    "severity": "Warning",
+    "errorCode": "UNSUPPORTED_COUNTRY",
+    "errorMessageTemplate": "Country code may not be supported for this payment type"
+}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### CREATE VALIDATION RULES - DECIMAL RANGE
+### ─────────────────────────────────────────────────────────────────────────────
+### Create a rule that validates numeric field is within a range
+
+# Validate payment amount (minimum)
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "Amount",
+    "ruleType": "DecimalRange",
+    "parameters": "{\"min\": 0.01, \"max\": 1000000}",
+    "severity": "Error",
+    "errorCode": "INVALID_AMOUNT",
+    "errorMessageTemplate": "Payment amount must be between 0.01 and 1,000,000"
+}
+
+# Validate account number is present
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "AccountNumber",
+    "ruleType": "Required",
+    "parameters": "{}",
+    "severity": "Warning",
+    "errorCode": "ACCOUNT_NUMBER_MISSING",
+    "errorMessageTemplate": "Account number is recommended for payment processing"
+}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### CREATE VALIDATION RULES - DATE FORMAT
+### ─────────────────────────────────────────────────────────────────────────────
+### Create a rule that validates date format
+
+# Validate invoice date format (DD.MM.YYYY)
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "InvoiceDate",
+    "ruleType": "DateFormat",
+    "parameters": "{\"format\": \"dd.MM.yyyy\"}",
+    "severity": "Error",
+    "errorCode": "INVALID_INVOICE_DATE_FORMAT",
+    "errorMessageTemplate": "Invoice date must be in format DD.MM.YYYY (e.g., 01.02.2021)"
+}
+
+# Validate ArriveBy field values
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "ArriveBy",
+    "ruleType": "AllowedValues",
+    "parameters": "{\"values\": [\"ASAP\", \"STANDARD\", \"NEXT_DAY\"], \"ignoreCase\": true}",
+    "severity": "Warning",
+    "errorCode": "INVALID_ARRIVE_BY",
+    "errorMessageTemplate": "ArriveBy should be one of: ASAP, STANDARD, NEXT_DAY"
+}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### GET VALIDATION RULE BY ID
+### ─────────────────────────────────────────────────────────────────────────────
+### Replace {ruleId} with actual ID from create response
+
+@ruleId = {{createRequiredUniqueReferenceRule.response.body.id}}
+
+GET {{baseUrl}}/api/validation-rules/{{ruleId}}
+Accept: application/json
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### UPDATE VALIDATION RULE
+### ─────────────────────────────────────────────────────────────────────────────
+### Partial update - only specified fields are changed
+
+# Disable a rule
+PUT {{baseUrl}}/api/validation-rules/{{ruleId}}
+Content-Type: application/json
+
+{
+    "enabled": false
+}
+
+### Update error message
+PUT {{baseUrl}}/api/validation-rules/{{ruleId}}
+Content-Type: application/json
+
+{
+    "errorMessageTemplate": "Unique reference is required and cannot be empty or whitespace"
+}
+
+### Update multiple fields
+PUT {{baseUrl}}/api/validation-rules/{{ruleId}}
+Content-Type: application/json
+
+{
+    "enabled": true,
+    "severity": "Warning",
+    "errorCode": "UNIQUE_REFERENCE_MISSING",
+    "errorMessageTemplate": "Unique reference should be provided for better tracking"
+}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### TOGGLE VALIDATION RULE
+### ─────────────────────────────────────────────────────────────────────────────
+### Quick enable/disable toggle
+
+POST {{baseUrl}}/api/validation-rules/{{ruleId}}/toggle
+Accept: application/json
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### DELETE VALIDATION RULE
+### ─────────────────────────────────────────────────────────────────────────────
+### Permanently removes the rule
+
+DELETE {{baseUrl}}/api/validation-rules/{{ruleId}}
+
+
+### ═══════════════════════════════════════════════════════════════════════════════
+### COMPLETE WORKFLOW EXAMPLE
+### ═══════════════════════════════════════════════════════════════════════════════
+### Step 1: Create validation rules
+### Step 2: Upload CSV file
+### Step 3: Check upload status - validation errors will reference the rules
+### ═══════════════════════════════════════════════════════════════════════════════
+
+### Step 1a: Create required field rule for UniqueReference
+# @name step1_createRule
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "UniqueReference",
+    "ruleType": "Required",
+    "parameters": "{}",
+    "severity": "Error",
+    "errorCode": "UNIQUE_REFERENCE_REQUIRED",
+    "errorMessageTemplate": "Unique reference is required"
+}
+
+### Step 1b: Create currency validation rule
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "PaymentCurrency",
+    "ruleType": "AllowedValues",
+    "parameters": "{\"values\": [\"GBP\", \"EUR\", \"USD\"], \"ignoreCase\": true}",
+    "severity": "Error",
+    "errorCode": "INVALID_CURRENCY",
+    "errorMessageTemplate": "Currency must be GBP, EUR, or USD"
+}
+
+### Step 1c: Create amount range rule
+POST {{baseUrl}}/api/validation-rules
+Content-Type: application/json
+
+{
+    "scope": "Field",
+    "fieldName": "Amount",
+    "ruleType": "DecimalRange",
+    "parameters": "{\"min\": 0.01, \"max\": 1000000}",
+    "severity": "Error",
+    "errorCode": "INVALID_AMOUNT",
+    "errorMessageTemplate": "Amount must be between 0.01 and 1,000,000"
+}
+
+### Step 2: Upload CSV (use curl or VS Code REST Client file upload)
+### curl -F "file=@your-file.csv" http://localhost:5099/api/payment-uploads
+
+### Step 3: Check upload status (replace with actual uploadId and token)
+### GET {{baseUrl}}/api/payment-uploads/{uploadId}/status?token={token}
+
+### Step 4: Get validation errors
+### GET {{baseUrl}}/api/payment-uploads/{uploadId}/errors?token={token}

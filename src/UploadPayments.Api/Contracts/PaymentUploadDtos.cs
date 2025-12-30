@@ -53,3 +53,45 @@ public sealed record PaymentInstructionsPageDto(
     int Returned,
     int? NextCursorRow,
     IReadOnlyList<PaymentInstructionDto> Instructions);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation Rules DTOs
+// ─────────────────────────────────────────────────────────────────────────────
+
+public sealed record ValidationRuleDto(
+    Guid Id,
+    bool Enabled,
+    string Scope,
+    string? FieldName,
+    string RuleType,
+    string Parameters,
+    string Severity,
+    string ErrorCode,
+    string ErrorMessageTemplate,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public sealed record CreateValidationRuleDto(
+    string Scope,
+    string? FieldName,
+    string RuleType,
+    string Parameters,
+    string Severity,
+    string ErrorCode,
+    string ErrorMessageTemplate);
+
+public sealed record UpdateValidationRuleDto(
+    bool? Enabled,
+    string? Scope,
+    string? FieldName,
+    string? RuleType,
+    string? Parameters,
+    string? Severity,
+    string? ErrorCode,
+    string? ErrorMessageTemplate);
+
+public sealed record ValidationRulesPageDto(
+    int Total,
+    int Returned,
+    int? NextOffset,
+    IReadOnlyList<ValidationRuleDto> Rules);
