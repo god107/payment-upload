@@ -7,8 +7,47 @@ services:
       POSTGRES_DB: upload_payments
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U upload_payments -d upload_payments"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
     volumes:
       - upload_payments_pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__UploadPaymentsDb: Host=db;Port=5432;Database=upload_payments;Username=upload_payments;Password=upload_payments
+      ValidationWorker__PollDelayMilliseconds: 500
+      ValidationWorker__ChunkSizeRows: 1000
+      ValidationWorker__HeartbeatSeconds: 10
+      ValidationWorker__StaleLockSeconds: 60
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5099:8080"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__UploadPaymentsDb: Host=db;Port=5432;Database=upload_payments;Username=upload_payments;Password=upload_payments
+      ValidationWorker__PollDelayMilliseconds: 500
+      ValidationWorker__ChunkSizeRows: 1000
+      ValidationWorker__HeartbeatSeconds: 10
+      ValidationWorker__StaleLockSeconds: 60
+      ValidationWorker__MaxAttempts: 5
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   upload_payments_pgdata:
