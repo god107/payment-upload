@@ -18,7 +18,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
+      target: api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__UploadPaymentsDb: Host=db;Port=5432;Database=upload_payments;Username=upload_payments;Password=upload_payments
@@ -35,7 +36,8 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: Dockerfile
+      target: worker
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__UploadPaymentsDb: Host=db;Port=5432;Database=upload_payments;Username=upload_payments;Password=upload_payments
