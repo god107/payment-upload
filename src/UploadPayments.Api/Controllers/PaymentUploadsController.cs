@@ -12,10 +12,18 @@ namespace UploadPayments.Api.Controllers;
 [Route("api/payment-uploads")]
 public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : ControllerBase
 {
-    [HttpPost]
-    [ProducesResponseType(typeof(UploadAcceptedDto), StatusCodes.Status202Accepted)]
-    public async Task<IActionResult> Upload([FromForm] IFormFile file, CancellationToken cancellationToken)
+    public class UploadRequest
     {
+        public required IFormFile File { get; set; }
+    }
+
+    [HttpPost]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(UploadAcceptedDto), StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> Upload([FromForm] UploadRequest request, CancellationToken cancellationToken)
+    {
+        var file = request.File;
+        
         if (file is null || file.Length == 0)
         {
             return BadRequest("File is required.");

@@ -7,17 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\UploadPayments.Application\UploadPayments.Application.csproj" />
     <ProjectReference Include="..\UploadPayments.Infrastructure\UploadPayments.Infrastructure.csproj" />
-    <ProjectReference Include="..\UploadPayments.Domain\UploadPayments.Domain.csproj" />
   </ItemGroup>
 
 </Project>
