@@ -1,0 +1,450 @@
+@page "/validation-rules/edit/{id:guid}"
+@using UploadPayments.BlazorUI.Services
+@using UploadPayments.Contracts
+@using System.Text.Json
+@inject ValidationRulesApiClient ApiClient
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Edit Validation Rule</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Edit Validation Rule</h1>
+        <a href="/validation-rules" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Rules
+        </a>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle"></i> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading validation rule...</p>
+        </div>
+    }
+    else if (existingRule == null)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            Validation rule not found.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Rule Details</h5>
+            </div>
+            <div class="card-body">
+                <EditForm Model="model" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="form-label">Error Code</label>
+                        <InputText @bind-Value="model.ErrorCode" class="form-control" placeholder="Enter error code" />
+                        <small class="form-text text-muted">Current: @existingRule.ErrorCode</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Error Message Template</label>
+                        <InputTextArea @bind-Value="model.ErrorMessageTemplate" class="form-control" rows="2" placeholder="Optional error message template" />
+                        <small class="form-text text-muted">Current: @(existingRule.ErrorMessageTemplate ?? "None")</small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Scope</label>
+                            <InputSelect @bind-Value="model.Scope" class="form-select" @onchange="OnScopeChanged">
+                                <option value="">-- No Change --</option>
+                                <option value="Row">Row</option>
+                                <option value="Field">Field</option>
+                            </InputSelect>
+                            <small class="form-text text-muted">Current: @existingRule.Scope</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Field Name</label>
+                            <InputText @bind-Value="model.FieldName" 
+                                       class="form-control" 
+                                       placeholder="Enter field name"
+                                       disabled="@(GetEffectiveScope() != "Field")" />
+                            <small class="form-text text-muted">
+                                Current: @(existingRule.FieldName ?? "None")
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Rule Type</label>
+                            <InputSelect @bind-Value="model.RuleType" class="form-select" @onchange="OnRuleTypeChanged">
+                                <option value="">-- No Change --</option>
+                                <option value="Required">Required</option>
+                                <option value="Regex">Regex</option>
+                                <option value="AllowedValues">Allowed Values</option>
+                                <option value="DecimalRange">Decimal Range</option>
+                                <option value="DateFormat">Date Format</option>
+                            </InputSelect>
+                            <small class="form-text text-muted">Current: @existingRule.RuleType</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Severity</label>
+                            <InputSelect @bind-Value="model.Severity" class="form-select">
+                                <option value="">-- No Change --</option>
+                                <option value="Warning">Warning</option>
+                                <option value="Error">Error</option>
+                            </InputSelect>
+                            <small class="form-text text-muted">Current: @existingRule.Severity</small>
+                        </div>
+                    </div>
+
+                    @* Rule-specific parameters *@
+                    @{
+                        var effectiveRuleType = GetEffectiveRuleType();
+                    }
+                    @if (!string.IsNullOrEmpty(effectiveRuleType))
+                    {
+                        <div class="card bg-light mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">Rule Parameters</h6>
+                            </div>
+                            <div class="card-body">
+                                @switch (effectiveRuleType)
+                                {
+                                    case "Required":
+                                        <div class="alert alert-info mb-0">
+                                            <i class="bi bi-info-circle"></i>
+                                            This rule type does not require any parameters.
+                                        </div>
+                                        break;
+
+                                    case "Regex":
+                                        <div class="mb-0">
+                                            <label class="form-label">Pattern</label>
+                                            <InputText @bind-Value="regexPattern" class="form-control" placeholder="^[A-Z0-9]+$" />
+                                            <small class="form-text text-muted">Current: @GetCurrentParameter("pattern")</small>
+                                        </div>
+                                        break;
+
+                                    case "AllowedValues":
+                                        <div class="mb-0">
+                                            <label class="form-label">Allowed Values</label>
+                                            <InputTextArea @bind-Value="allowedValuesInput" class="form-control" rows="3" placeholder="Enter values separated by commas&#10;e.g., USD, EUR, GBP" />
+                                            <small class="form-text text-muted">Current: @GetCurrentParameter("values")</small>
+                                        </div>
+                                        break;
+
+                                    case "DecimalRange":
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3 mb-md-0">
+                                                <label class="form-label">Minimum Value</label>
+                                                <InputNumber @bind-Value="decimalMin" class="form-control" placeholder="0.00" />
+                                                <small class="form-text text-muted">Current: @GetCurrentParameter("min")</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Maximum Value</label>
+                                                <InputNumber @bind-Value="decimalMax" class="form-control" placeholder="1000.00" />
+                                                <small class="form-text text-muted">Current: @GetCurrentParameter("max")</small>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "DateFormat":
+                                        <div class="mb-0">
+                                            <label class="form-label">Format</label>
+                                            <InputText @bind-Value="dateFormat" class="form-control" placeholder="yyyy-MM-dd" />
+                                            <small class="form-text text-muted">Current: @GetCurrentParameter("format")</small>
+                                        </div>
+                                        break;
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <InputCheckbox @bind-Value="EnabledCheckbox" class="form-check-input" id="isEnabled" />
+                            <label class="form-check-label" for="isEnabled">
+                                Enable this rule
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Current: @(existingRule.Enabled ? "Enabled" : "Disabled")</small>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span>Update Rule</span>
+                            }
+                        </button>
+                        <a href="/validation-rules" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private ValidationRuleDto? existingRule;
+    private UpdateValidationRuleModel model = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private string? errorMessage;
+
+    private bool EnabledCheckbox
+    {
+        get => model.Enabled ?? existingRule?.Enabled ?? false;
+        set => model.Enabled = value;
+    }
+
+    // Parameter fields
+    private string? regexPattern;
+    private string? allowedValuesInput;
+    private decimal? decimalMin;
+    private decimal? decimalMax;
+    private string? dateFormat;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRule();
+    }
+
+    private async Task LoadRule()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            existingRule = await ApiClient.GetRuleAsync(Id);
+            
+            if (existingRule != null)
+            {
+                // Initialize form with existing values (nullable fields, so don't pre-populate)
+                
+                // Load parameters
+                LoadParameters();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load validation rule: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void LoadParameters()
+    {
+        if (existingRule == null || string.IsNullOrEmpty(existingRule.Parameters))
+            return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(existingRule.Parameters);
+            var root = doc.RootElement;
+
+            switch (existingRule.RuleType)
+            {
+                case "Regex":
+                    if (root.TryGetProperty("pattern", out var pattern))
+                        regexPattern = pattern.GetString();
+                    break;
+
+                case "AllowedValues":
+                    if (root.TryGetProperty("values", out var values))
+                    {
+                        var valueArray = values.EnumerateArray().Select(v => v.GetString()).ToArray();
+                        allowedValuesInput = string.Join(", ", valueArray);
+                    }
+                    break;
+
+                case "DecimalRange":
+                    if (root.TryGetProperty("min", out var min) && min.ValueKind != JsonValueKind.Null)
+                        decimalMin = min.GetDecimal();
+                    if (root.TryGetProperty("max", out var max) && max.ValueKind != JsonValueKind.Null)
+                        decimalMax = max.GetDecimal();
+                    break;
+
+                case "DateFormat":
+                    if (root.TryGetProperty("format", out var format))
+                        dateFormat = format.GetString();
+                    break;
+            }
+        }
+        catch
+        {
+            // Ignore parameter parsing errors
+        }
+    }
+
+    private string GetEffectiveScope()
+    {
+        if (!string.IsNullOrEmpty(model.Scope))
+            return model.Scope;
+        return existingRule?.Scope ?? "Row";
+    }
+
+    private string? GetEffectiveRuleType()
+    {
+        if (!string.IsNullOrEmpty(model.RuleType))
+            return model.RuleType;
+        return existingRule?.RuleType;
+    }
+
+    private string GetCurrentParameter(string paramName)
+    {
+        if (existingRule == null || string.IsNullOrEmpty(existingRule.Parameters))
+            return "None";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(existingRule.Parameters);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty(paramName, out var value))
+            {
+                if (value.ValueKind == JsonValueKind.Null)
+                    return "None";
+                
+                if (value.ValueKind == JsonValueKind.Array)
+                {
+                    var items = value.EnumerateArray().Select(v => v.GetString()).ToArray();
+                    return string.Join(", ", items);
+                }
+                
+                return value.ToString();
+            }
+        }
+        catch
+        {
+            // Ignore errors
+        }
+
+        return "None";
+    }
+
+    private void OnScopeChanged(ChangeEventArgs e)
+    {
+        if (GetEffectiveScope() != "Field")
+        {
+            model.FieldName = null;
+        }
+    }
+
+    private void OnRuleTypeChanged(ChangeEventArgs e)
+    {
+        // Clear parameter fields when rule type changes
+        regexPattern = null;
+        allowedValuesInput = null;
+        decimalMin = null;
+        decimalMax = null;
+        dateFormat = null;
+    }
+
+    private async Task HandleSubmit()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            var dto = new UpdateValidationRuleDto(
+                Enabled: model.Enabled,
+                Scope: model.Scope,
+                FieldName: model.FieldName,
+                RuleType: model.RuleType,
+                Parameters: BuildParameters(),
+                Severity: model.Severity,
+                ErrorCode: model.ErrorCode,
+                ErrorMessageTemplate: model.ErrorMessageTemplate
+            );
+
+            await ApiClient.UpdateRuleAsync(Id, dto);
+            Navigation.NavigateTo("/validation-rules");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to update validation rule: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private string? BuildParameters()
+    {
+        var effectiveRuleType = GetEffectiveRuleType();
+        if (string.IsNullOrEmpty(effectiveRuleType))
+            return null;
+
+        // If parameters have been modified, build new parameter JSON
+        var hasChanges = effectiveRuleType switch
+        {
+            "Regex" => !string.IsNullOrEmpty(regexPattern),
+            "AllowedValues" => !string.IsNullOrEmpty(allowedValuesInput),
+            "DecimalRange" => decimalMin.HasValue || decimalMax.HasValue,
+            "DateFormat" => !string.IsNullOrEmpty(dateFormat),
+            _ => false
+        };
+
+        if (!hasChanges)
+            return null;
+
+        return effectiveRuleType switch
+        {
+            "Required" => "{}",
+            "Regex" => JsonSerializer.Serialize(new { pattern = regexPattern ?? "" }),
+            "AllowedValues" => JsonSerializer.Serialize(new 
+            { 
+                values = (allowedValuesInput ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToArray()
+            }),
+            "DecimalRange" => JsonSerializer.Serialize(new 
+            { 
+                min = decimalMin, 
+                max = decimalMax 
+            }),
+            "DateFormat" => JsonSerializer.Serialize(new { format = dateFormat ?? "" }),
+            _ => null
+        };
+    }
+
+    private class UpdateValidationRuleModel
+    {
+        public bool? Enabled { get; set; }
+        public string? ErrorCode { get; set; }
+        public string? ErrorMessageTemplate { get; set; }
+        public string? Scope { get; set; }
+        public string? FieldName { get; set; }
+        public string? RuleType { get; set; }
+        public string? Severity { get; set; }
+    }
+}

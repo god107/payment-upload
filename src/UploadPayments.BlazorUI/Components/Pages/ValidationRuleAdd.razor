@@ -1,0 +1,274 @@
+@page "/validation-rules/add"
+@using UploadPayments.BlazorUI.Services
+@using UploadPayments.Contracts
+@using System.Text.Json
+@inject ValidationRulesApiClient ApiClient
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Add Validation Rule</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Add Validation Rule</h1>
+        <a href="/validation-rules" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Rules
+        </a>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle"></i> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Rule Details</h5>
+        </div>
+        <div class="card-body">
+            <EditForm Model="model" OnValidSubmit="HandleSubmit">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <label class="form-label">Error Code <span class="text-danger">*</span></label>
+                    <InputText @bind-Value="model.ErrorCode" class="form-control" placeholder="Enter error code" />
+                    <ValidationMessage For="() => model.ErrorCode" class="text-danger" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Error Message Template</label>
+                    <InputTextArea @bind-Value="model.ErrorMessageTemplate" class="form-control" rows="2" placeholder="Optional error message template" />
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Scope <span class="text-danger">*</span></label>
+                        <InputSelect @bind-Value="model.Scope" class="form-select" @onchange="OnScopeChanged">
+                            <option value="">-- Select Scope --</option>
+                            <option value="Row">Row</option>
+                            <option value="Field">Field</option>
+                        </InputSelect>
+                        <ValidationMessage For="() => model.Scope" class="text-danger" />
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">
+                            Field Name 
+                            @if (model.Scope == "Field")
+                            {
+                                <span class="text-danger">*</span>
+                            }
+                        </label>
+                        <InputText @bind-Value="model.FieldName" 
+                                   class="form-control" 
+                                   placeholder="Enter field name"
+                                   disabled="@(model.Scope != "Field")" />
+                        <small class="form-text text-muted">Required for Field scope rules</small>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Rule Type <span class="text-danger">*</span></label>
+                        <InputSelect @bind-Value="model.RuleType" class="form-select" @onchange="OnRuleTypeChanged">
+                            <option value="">-- Select Rule Type --</option>
+                            <option value="Required">Required</option>
+                            <option value="Regex">Regex</option>
+                            <option value="AllowedValues">Allowed Values</option>
+                            <option value="DecimalRange">Decimal Range</option>
+                            <option value="DateFormat">Date Format</option>
+                        </InputSelect>
+                        <ValidationMessage For="() => model.RuleType" class="text-danger" />
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Severity <span class="text-danger">*</span></label>
+                        <InputSelect @bind-Value="model.Severity" class="form-select">
+                            <option value="">-- Select Severity --</option>
+                            <option value="Warning">Warning</option>
+                            <option value="Error">Error</option>
+                        </InputSelect>
+                        <ValidationMessage For="() => model.Severity" class="text-danger" />
+                    </div>
+                </div>
+
+                @* Rule-specific parameters *@
+                @if (!string.IsNullOrEmpty(model.RuleType))
+                {
+                    <div class="card bg-light mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Rule Parameters</h6>
+                        </div>
+                        <div class="card-body">
+                            @switch (model.RuleType)
+                            {
+                                case "Required":
+                                    <div class="alert alert-info mb-0">
+                                        <i class="bi bi-info-circle"></i>
+                                        This rule type does not require any parameters.
+                                    </div>
+                                    break;
+
+                                case "Regex":
+                                    <div class="mb-0">
+                                        <label class="form-label">Pattern <span class="text-danger">*</span></label>
+                                        <InputText @bind-Value="regexPattern" class="form-control" placeholder="^[A-Z0-9]+$" />
+                                        <small class="form-text text-muted">Enter a regular expression pattern</small>
+                                    </div>
+                                    break;
+
+                                case "AllowedValues":
+                                    <div class="mb-0">
+                                        <label class="form-label">Allowed Values <span class="text-danger">*</span></label>
+                                        <InputTextArea @bind-Value="allowedValuesInput" class="form-control" rows="3" placeholder="Enter values separated by commas&#10;e.g., USD, EUR, GBP" />
+                                        <small class="form-text text-muted">Enter comma-separated values</small>
+                                    </div>
+                                    break;
+
+                                case "DecimalRange":
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3 mb-md-0">
+                                            <label class="form-label">Minimum Value</label>
+                                            <InputNumber @bind-Value="decimalMin" class="form-control" placeholder="0.00" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Maximum Value</label>
+                                            <InputNumber @bind-Value="decimalMax" class="form-control" placeholder="1000.00" />
+                                        </div>
+                                    </div>
+                                    <small class="form-text text-muted">At least one value (min or max) is required</small>
+                                    break;
+
+                                case "DateFormat":
+                                    <div class="mb-0">
+                                        <label class="form-label">Format <span class="text-danger">*</span></label>
+                                        <InputText @bind-Value="dateFormat" class="form-control" placeholder="yyyy-MM-dd" />
+                                        <small class="form-text text-muted">Enter a .NET date format string (e.g., yyyy-MM-dd, MM/dd/yyyy)</small>
+                                    </div>
+                                    break;
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-circle me-2"></i>
+                            <span>Create Rule</span>
+                        }
+                    </button>
+                    <a href="/validation-rules" class="btn btn-secondary">Cancel</a>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private CreateValidationRuleModel model = new();
+    private bool isSaving;
+    private string? errorMessage;
+
+    // Parameter fields
+    private string? regexPattern;
+    private string? allowedValuesInput;
+    private decimal? decimalMin;
+    private decimal? decimalMax;
+    private string? dateFormat;
+
+    private void OnScopeChanged(ChangeEventArgs e)
+    {
+        if (model.Scope != "Field")
+        {
+            model.FieldName = null;
+        }
+    }
+
+    private void OnRuleTypeChanged(ChangeEventArgs e)
+    {
+        // Clear parameter fields when rule type changes
+        regexPattern = null;
+        allowedValuesInput = null;
+        decimalMin = null;
+        decimalMax = null;
+        dateFormat = null;
+    }
+
+    private async Task HandleSubmit()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            // Build parameters JSON based on rule type
+            var parameters = BuildParameters();
+
+            var dto = new CreateValidationRuleDto(
+                Scope: model.Scope,
+                FieldName: model.FieldName,
+                RuleType: model.RuleType,
+                Parameters: parameters,
+                Severity: model.Severity,
+                ErrorCode: model.ErrorCode,
+                ErrorMessageTemplate: model.ErrorMessageTemplate ?? string.Empty
+            );
+
+            await ApiClient.CreateRuleAsync(dto);
+            Navigation.NavigateTo("/validation-rules");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to create validation rule: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private string BuildParameters()
+    {
+        if (string.IsNullOrEmpty(model.RuleType))
+            return "{}";
+
+        return model.RuleType switch
+        {
+            "Required" => "{}",
+            "Regex" => JsonSerializer.Serialize(new { pattern = regexPattern ?? "" }),
+            "AllowedValues" => JsonSerializer.Serialize(new 
+            { 
+                values = (allowedValuesInput ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToArray()
+            }),
+            "DecimalRange" => JsonSerializer.Serialize(new 
+            { 
+                min = decimalMin, 
+                max = decimalMax 
+            }),
+            "DateFormat" => JsonSerializer.Serialize(new { format = dateFormat ?? "" }),
+            _ => "{}"
+        };
+    }
+
+    private class CreateValidationRuleModel
+    {
+        public string ErrorCode { get; set; } = string.Empty;
+        public string? ErrorMessageTemplate { get; set; }
+        public string Scope { get; set; } = string.Empty;
+        public string? FieldName { get; set; }
+        public string RuleType { get; set; } = string.Empty;
+        public string Severity { get; set; } = string.Empty;
+    }
+}

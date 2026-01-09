@@ -701,15 +701,14 @@ public sealed class Worker(
                         break;
                     }
 
-                    if (!parameters.TryGetValue("values", out var valuesObj) || valuesObj is not JsonElement valuesElement || valuesElement.ValueKind != JsonValueKind.Array)
+                    if (!parameters.TryGetValue("values", out var valuesObj) || valuesObj is not List<string?> valuesList)
                     {
                         break;
                     }
 
                     var ignoreCase = parameters.TryGetValue("ignoreCase", out var ignoreCaseObj) && ignoreCaseObj is bool ic && ic;
 
-                    var allowed = valuesElement.EnumerateArray()
-                        .Select(x => x.GetString())
+                    var allowed = valuesList
                         .Where(x => !string.IsNullOrWhiteSpace(x))
                         .Select(x => ignoreCase ? x!.Trim().ToUpperInvariant() : x!.Trim())
                         .ToHashSet(StringComparer.Ordinal);
@@ -792,7 +791,7 @@ public sealed class Worker(
                     JsonValueKind.Number => prop.Value.TryGetDecimal(out var d) ? d : prop.Value.GetDouble(),
                     JsonValueKind.True => true,
                     JsonValueKind.False => false,
-                    JsonValueKind.Array => prop.Value,
+                    JsonValueKind.Array => prop.Value.EnumerateArray().Select(x => x.GetString()).ToList(),
                     _ => prop.Value.ToString()
                 };
             }
