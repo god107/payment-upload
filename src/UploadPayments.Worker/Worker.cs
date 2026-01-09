@@ -401,6 +401,31 @@ public sealed class Worker(
             {
                 await db.SaveChangesAsync(ct);
             }
+            
+            // Send real-time progress updates every 100 rows
+            // Calculate cumulative totals from completed chunks + current chunk progress
+            if (processed % 100 == 0)
+            {
+                var completedChunksTotals = await db.PaymentUploadChunks
+                    .AsNoTracking()
+                    .Where(x => x.UploadId == chunk.UploadId && x.Status == ChunkStatus.Succeeded)
+                    .GroupBy(_ => 1)
+                    .Select(g => new
+                    {
+                        TotalProcessed = g.Sum(x => x.ProcessedRows),
+                        TotalSucceeded = g.Sum(x => x.SucceededRows),
+                        TotalFailed = g.Sum(x => x.FailedRows)
+                    })
+                    .FirstOrDefaultAsync(ct);
+                
+                // Add current chunk's progress to completed chunks
+                var cumulativeProcessed = (completedChunksTotals?.TotalProcessed ?? 0) + processed;
+                var cumulativeSucceeded = (completedChunksTotals?.TotalSucceeded ?? 0) + succeeded;
+                var cumulativeFailed = (completedChunksTotals?.TotalFailed ?? 0) + failed;
+                
+                var uploadToken = upload.Token;
+                await notificationService.NotifyRowProgressUpdate(chunk.UploadId, uploadToken, chunk.ChunkIndex, cumulativeProcessed, cumulativeSucceeded);
+            }
         }
 
         if (pendingErrors.Count > 0)
@@ -421,11 +446,33 @@ public sealed class Worker(
         var totalChunks = await db.PaymentUploadChunks.CountAsync(x => x.UploadId == chunk.UploadId, ct);
         var completedChunks = await db.PaymentUploadChunks.CountAsync(x => x.UploadId == chunk.UploadId && x.Status == ChunkStatus.Succeeded, ct);
         
+        // Calculate cumulative totals across all completed chunks
+        var cumulativeTotals = await db.PaymentUploadChunks
+            .AsNoTracking()
+            .Where(x => x.UploadId == chunk.UploadId && x.Status == ChunkStatus.Succeeded)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalProcessed = g.Sum(x => x.ProcessedRows),
+                TotalSucceeded = g.Sum(x => x.SucceededRows),
+                TotalFailed = g.Sum(x => x.FailedRows)
+            })
+            .FirstOrDefaultAsync(ct);
+        
         // Get upload token for notification
         var uploadForNotification = await db.PaymentUploads.AsNoTracking().FirstOrDefaultAsync(x => x.Id == chunk.UploadId, ct);
-        if (uploadForNotification is not null)
+        if (uploadForNotification is not null && cumulativeTotals is not null)
         {
-            await notificationService.NotifyChunkCompleted(chunk.UploadId, uploadForNotification.Token, chunk.ChunkIndex, processed, succeeded, failed, totalChunks, completedChunks);
+            // Send cumulative totals instead of single chunk stats
+            await notificationService.NotifyChunkCompleted(
+                chunk.UploadId, 
+                uploadForNotification.Token, 
+                chunk.ChunkIndex, 
+                cumulativeTotals.TotalProcessed, 
+                cumulativeTotals.TotalSucceeded, 
+                cumulativeTotals.TotalFailed, 
+                totalChunks, 
+                completedChunks);
         }
 
         await TryFinalizeUploadAsync(db, chunk.UploadId, ct);

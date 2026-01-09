@@ -129,6 +129,7 @@
             hubConnection.On<Guid, Guid, int, int, int, int, int, int>("ChunkCompleted", OnChunkCompleted);
             hubConnection.On<Guid, Guid, int, int, int, int>("UploadCompleted", OnUploadCompleted);
             hubConnection.On<Guid, Guid, string>("UploadFailed", OnUploadFailed);
+            hubConnection.On<Guid, Guid, int, int, int>("RowProgressUpdate", OnRowProgressUpdate);
 
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("SubscribeToUpload", token.ToString());
@@ -153,7 +154,24 @@
     {
         if (uploadStatus is not null)
         {
+            // Now receiving cumulative totals from worker
             uploadStatus = uploadStatus with { ProcessedRows = processed, SucceededRows = succeeded, FailedRows = failed };
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnRowProgressUpdate(Guid uploadId, Guid token, int chunkIndex, int processedInChunk, int totalInChunk)
+    {
+        if (uploadStatus is not null)
+        {
+            // Receive cumulative totals from worker (handles parallel workers correctly)
+            // processedInChunk is actually cumulative processed across all chunks
+            // totalInChunk is actually cumulative succeeded across all chunks
+            uploadStatus = uploadStatus with 
+            { 
+                ProcessedRows = processedInChunk,
+                SucceededRows = totalInChunk
+            };
             await InvokeAsync(StateHasChanged);
         }
     }
