@@ -44,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
-    scale: 5
+    scale: 1
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__UploadPaymentsDb: Host=db;Port=5432;Database=upload_payments;Username=upload_payments;Password=upload_payments
