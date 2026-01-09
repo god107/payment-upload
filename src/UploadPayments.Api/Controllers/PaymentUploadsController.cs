@@ -29,6 +29,7 @@ public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : Contr
             .Take(limit)
             .Select(x => new UploadListItemDto(
                 x.Id,
+                x.Token,
                 x.OriginalFileName,
                 x.Status.ToString(),
                 x.CreatedAtUtc,

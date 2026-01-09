@@ -8,6 +8,7 @@ public sealed record UploadAcceptedDto(
 
 public sealed record UploadListItemDto(
     Guid UploadId,
+    Guid Token,
     string FileName,
     string Status,
     DateTime CreatedAtUtc,
