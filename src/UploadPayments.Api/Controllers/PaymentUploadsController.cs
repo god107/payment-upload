@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text.Json;
-using UploadPayments.Api.Contracts;
+using UploadPayments.Contracts;
 using UploadPayments.Infrastructure.Persistence;
 using UploadPayments.Infrastructure.Persistence.Entities;
 
@@ -15,6 +15,30 @@ public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : Contr
     public class UploadRequest
     {
         public required IFormFile File { get; set; }
+    }
+
+    [HttpGet]
+    [ProducesResponseType(typeof(List<UploadListItemDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUploads(
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var uploads = await db.PaymentUploads
+            .AsNoTracking()
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(limit)
+            .Select(x => new UploadListItemDto(
+                x.Id,
+                x.OriginalFileName,
+                x.Status.ToString(),
+                x.CreatedAtUtc,
+                x.TotalRows,
+                x.ProcessedRows,
+                x.SucceededRows,
+                x.FailedRows))
+            .ToListAsync(cancellationToken);
+
+        return Ok(uploads);
     }
 
     [HttpPost]

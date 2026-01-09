@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UploadPayments.Infrastructure.Persistence;
 using UploadPayments.Infrastructure.Persistence.Entities;
+using UploadPayments.Contracts;
 
 namespace UploadPayments.Api.HostedServices;
 

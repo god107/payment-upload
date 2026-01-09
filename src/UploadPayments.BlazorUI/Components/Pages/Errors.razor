@@ -1,0 +1,135 @@
+@page "/uploads/{UploadIdParam}/errors/{TokenParam}"
+@using UploadPayments.BlazorUI.Services
+@using UploadPayments.Contracts
+@inject PaymentUploadsApiClient ApiClient
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Validation Errors</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Validation Errors</h1>
+            <p class="text-muted mb-0">Upload ID: @UploadIdParam</p>
+        </div>
+        <a href="/uploads/@UploadIdParam/@TokenParam" class="btn btn-outline-secondary">Back to Upload</a>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+    else if (errorsPage is null)
+    {
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    }
+    else if (!errorsPage.Errors.Any())
+    {
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle"></i> No validation errors found! All rows are valid.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@errorsPage.Returned Errors</h5>
+                
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Row #</th>
+                                <th>Field</th>
+                                <th>Severity</th>
+                                <th>Code</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var error in errorsPage.Errors)
+                            {
+                                <tr>
+                                    <td>@error.RowNumber</td>
+                                    <td>@(error.FieldName ?? "(row-level)")</td>
+                                    <td>
+                                        <span class="badge bg-@(error.Severity == "Error" ? "danger" : "warning")">
+                                            @error.Severity
+                                        </span>
+                                    </td>
+                                    <td><code>@error.Code</code></td>
+                                    <td>@error.Message</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (errorsPage.NextCursorRow.HasValue)
+                {
+                    <button class="btn btn-primary mt-3" @onclick="LoadMore">Load More Errors</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string UploadIdParam { get; set; } = string.Empty;
+    [Parameter] public string TokenParam { get; set; } = string.Empty;
+
+    private UploadErrorsPageDto? errorsPage;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadErrorsAsync();
+    }
+
+    private async Task LoadErrorsAsync()
+    {
+        try
+        {
+            if (!Guid.TryParse(UploadIdParam, out var uploadId) || !Guid.TryParse(TokenParam, out var token))
+            {
+                errorMessage = "Invalid upload ID or token";
+                return;
+            }
+
+            errorsPage = await ApiClient.GetUploadErrorsAsync(uploadId, token, null, 100);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load errors: {ex.Message}";
+        }
+    }
+
+    private async Task LoadMore()
+    {
+        if (errorsPage?.NextCursorRow is null) return;
+
+        try
+        {
+            if (!Guid.TryParse(UploadIdParam, out var uploadId) || !Guid.TryParse(TokenParam, out var token))
+                return;
+
+            var nextPage = await ApiClient.GetUploadErrorsAsync(uploadId, token, errorsPage.NextCursorRow, 100);
+            
+            if (nextPage is not null)
+            {
+                var combined = errorsPage.Errors.Concat(nextPage.Errors).ToList();
+                errorsPage = new UploadErrorsPageDto(
+                    errorsPage.UploadId,
+                    errorsPage.TotalRows,
+                    errorsPage.Returned + nextPage.Returned,
+                    nextPage.NextCursorRow,
+                    combined);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load more errors: {ex.Message}";
+        }
+    }
+}

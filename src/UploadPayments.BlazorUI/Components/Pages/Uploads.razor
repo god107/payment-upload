@@ -1,0 +1,153 @@
+@page "/uploads"
+@using UploadPayments.BlazorUI.Services
+@using UploadPayments.Contracts
+@inject PaymentUploadsApiClient ApiClient
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Payment Uploads</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Payment Uploads</h1>
+        <a href="/" class="btn btn-primary">
+            <i class="bi bi-upload"></i> New Upload
+        </a>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle"></i> @errorMessage
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading uploads...</p>
+        </div>
+    }
+    else if (uploads is null || uploads.Count == 0)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>No uploads yet.</strong> Click "New Upload" to upload your first payment file.
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Uploads</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>File Name</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th class="text-end">Total Rows</th>
+                                <th class="text-end">Processed</th>
+                                <th class="text-end">Succeeded</th>
+                                <th class="text-end">Failed</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var upload in uploads)
+                            {
+                                <tr>
+                                    <td>
+                                        <i class="bi bi-file-earmark-spreadsheet text-primary"></i>
+                                        <strong>@upload.FileName</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(upload.Status)">
+                                            @upload.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            @upload.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                                        </small>
+                                    </td>
+                                    <td class="text-end">@(upload.TotalRows?.ToString() ?? "-")</td>
+                                    <td class="text-end">@upload.ProcessedRows</td>
+                                    <td class="text-end">
+                                        <span class="text-success">@upload.SucceededRows</span>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (upload.FailedRows > 0)
+                                        {
+                                            <span class="text-danger fw-bold">@upload.FailedRows</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">0</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="alert alert-warning mb-0 py-1 px-2 small">
+                                            <i class="bi bi-lock"></i> Token required
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-warning mt-3">
+            <i class="bi bi-shield-lock"></i>
+            <strong>Security Note:</strong> This listing shows all uploads but doesn't include access tokens. 
+            To view upload details, you need the unique token URL that was provided when the file was uploaded.
+        </div>
+    }
+</div>
+
+@code {
+    private List<UploadListItemDto>? uploads;
+    private string? errorMessage;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUploads();
+    }
+
+    private async Task LoadUploads()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            uploads = await ApiClient.GetUploadsAsync(limit: 100);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load uploads: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string GetStatusBadgeClass(string status) => status switch
+    {
+        "Completed" => "bg-success",
+        "Failed" => "bg-danger",
+        "Parsing" => "bg-info",
+        "Validating" => "bg-primary",
+        "Queued" => "bg-secondary",
+        _ => "bg-secondary"
+    };
+}

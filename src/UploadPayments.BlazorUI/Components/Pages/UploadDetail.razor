@@ -1,0 +1,196 @@
+@page "/uploads/{UploadIdParam}/{TokenParam}"
+@using Microsoft.AspNetCore.SignalR.Client
+@using UploadPayments.BlazorUI.Services
+@using UploadPayments.Contracts
+@inject PaymentUploadsApiClient ApiClient
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+<PageTitle>Upload Details</PageTitle>
+
+<div class="container mt-4">
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger">
+            <strong>Error:</strong> @errorMessage
+        </div>
+        <a href="/" class="btn btn-primary">Back to Home</a>
+    }
+    else if (uploadStatus is null)
+    {
+        <div class="d-flex align-items-center">
+            <div class="spinner-border me-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span>Loading upload details...</span>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1>Upload Details</h1>
+                <p class="text-muted mb-0">ID: @uploadStatus.UploadId</p>
+                <p class="text-muted small">Created: @uploadStatus.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
+            </div>
+            <div>
+                <h3><span class="badge bg-@GetStatusBadgeColor(uploadStatus.Status)">@uploadStatus.Status</span></h3>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-3"><div class="card"><div class="card-body"><h6>Total Rows</h6><h3>@(uploadStatus.TotalRows ?? 0)</h3></div></div></div>
+            <div class="col-md-3"><div class="card"><div class="card-body"><h6>Processed</h6><h3>@uploadStatus.ProcessedRows</h3></div></div></div>
+            <div class="col-md-3"><div class="card"><div class="card-body"><h6>Succeeded</h6><h3 class="text-success">@uploadStatus.SucceededRows</h3></div></div></div>
+            <div class="col-md-3"><div class="card"><div class="card-body"><h6>Failed</h6><h3 class="text-danger">@uploadStatus.FailedRows</h3></div></div></div>
+        </div>
+
+        @if (uploadStatus.TotalRows > 0)
+        {
+            <div class="progress mt-4" style="height: 30px;">
+                <div class="progress-bar" role="progressbar" style="width: @GetProgressPercentage()%">@GetProgressPercentage()%</div>
+            </div>
+        }
+
+        <div class="mt-4">
+            <a href="/uploads/@UploadIdParam/errors/@TokenParam" class="btn btn-danger">View Errors (@uploadStatus.FailedRows)</a>
+            <a href="/uploads/@UploadIdParam/instructions/@TokenParam" class="btn btn-primary ms-2">View Instructions (@(uploadStatus.TotalRows ?? 0))</a>
+            <a href="/" class="btn btn-outline-secondary ms-2">Back to Home</a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string UploadIdParam { get; set; } = string.Empty;
+    [Parameter] public string TokenParam { get; set; } = string.Empty;
+    
+    private UploadStatusDto? uploadStatus;
+    private HubConnection? hubConnection;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (!Guid.TryParse(UploadIdParam, out var uploadId))
+            {
+                errorMessage = "Invalid upload ID format";
+                return;
+            }
+
+            if (!Guid.TryParse(TokenParam, out var token))
+            {
+                errorMessage = "Invalid token format";
+                return;
+            }
+
+            await LoadStatusAsync(uploadId, token);
+            
+            if (uploadStatus is null)
+            {
+                errorMessage = "Upload not found or access denied";
+                return;
+            }
+
+            await InitializeSignalRAsync(token);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load upload: {ex.Message}";
+        }
+    }
+
+    private async Task LoadStatusAsync(Guid uploadId, Guid token)
+    {
+        try
+        {
+            uploadStatus = await ApiClient.GetUploadStatusAsync(uploadId, token);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load upload status: {ex.Message}";
+            Console.WriteLine($"Error loading upload status: {ex}");
+        }
+    }
+
+    private async Task InitializeSignalRAsync(Guid token)
+    {
+        try
+        {
+            var apiBaseUrl = Configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl($"{apiBaseUrl}/hubs/payment-uploads")
+                .WithAutomaticReconnect()
+                .Build();
+
+            hubConnection.On<Guid, Guid, string, int?, int?>("UploadStatusChanged", OnStatusChanged);
+            hubConnection.On<Guid, Guid, int, int, int, int, int, int>("ChunkCompleted", OnChunkCompleted);
+            hubConnection.On<Guid, Guid, int, int, int, int>("UploadCompleted", OnUploadCompleted);
+            hubConnection.On<Guid, Guid, string>("UploadFailed", OnUploadFailed);
+
+            await hubConnection.StartAsync();
+            await hubConnection.InvokeAsync("SubscribeToUpload", token.ToString());
+        }
+        catch (Exception ex)
+        {
+            // SignalR connection failed - continue with polling fallback
+            Console.WriteLine($"SignalR connection failed: {ex.Message}");
+        }
+    }
+
+    private async Task OnStatusChanged(Guid uploadId, Guid token, string status, int? totalRows, int? totalChunks)
+    {
+        if (uploadStatus is not null)
+        {
+            uploadStatus = uploadStatus with { Status = status, TotalRows = totalRows ?? uploadStatus.TotalRows };
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnChunkCompleted(Guid uploadId, Guid token, int chunkIndex, int processed, int succeeded, int failed, int total, int completed)
+    {
+        if (uploadStatus is not null)
+        {
+            uploadStatus = uploadStatus with { ProcessedRows = processed, SucceededRows = succeeded, FailedRows = failed };
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnUploadCompleted(Guid uploadId, Guid token, int totalRows, int processed, int succeeded, int failed)
+    {
+        if (uploadStatus is not null)
+        {
+            uploadStatus = uploadStatus with { Status = "Completed", TotalRows = totalRows, ProcessedRows = processed, SucceededRows = succeeded, FailedRows = failed };
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnUploadFailed(Guid uploadId, Guid token, string error)
+    {
+        if (uploadStatus is not null)
+        {
+            uploadStatus = uploadStatus with { Status = "Failed", LastError = error };
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetStatusBadgeColor(string status) => status switch
+    {
+        "Completed" => "success",
+        "Failed" => "danger",
+        "Validating" or "Parsing" => "warning",
+        _ => "secondary"
+    };
+
+    private double GetProgressPercentage() => uploadStatus?.TotalRows > 0
+        ? Math.Round((double)uploadStatus.ProcessedRows / uploadStatus.TotalRows.Value * 100, 1)
+        : 0;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+            await hubConnection.DisposeAsync();
+    }
+}

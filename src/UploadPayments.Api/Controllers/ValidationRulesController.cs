@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using UploadPayments.Api.Contracts;
+using UploadPayments.Contracts;
 using UploadPayments.Infrastructure.Persistence;
 using UploadPayments.Infrastructure.Persistence.Entities;
 

@@ -24,6 +24,12 @@ FROM build-base AS publish-worker
 RUN dotnet publish ./src/UploadPayments.Worker/UploadPayments.Worker.csproj -c Release -o /app/publish --no-restore
 
 # =============================================================================
+# Blazor UI publish stage
+# =============================================================================
+FROM build-base AS publish-blazorui
+RUN dotnet publish ./src/UploadPayments.BlazorUI/UploadPayments.BlazorUI.csproj -c Release -o /app/publish --no-restore
+
+# =============================================================================
 # Base runtime stage - shared runtime dependencies
 # =============================================================================
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-base
@@ -59,3 +65,16 @@ RUN apt-get update \
 COPY --from=publish-worker /app/publish ./
 
 ENTRYPOINT ["dotnet", "UploadPayments.Worker.dll"]
+
+# =============================================================================
+# Blazor UI runtime - target: blazorui
+# =============================================================================
+FROM runtime-base AS blazorui
+
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+
+COPY --from=publish-blazorui /app/publish ./
+
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "UploadPayments.BlazorUI.dll"]
+

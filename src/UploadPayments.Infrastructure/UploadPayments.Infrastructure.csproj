@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\UploadPayments.Domain\UploadPayments.Domain.csproj" />
+    <ProjectReference Include="..\UploadPayments.Contracts\UploadPayments.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

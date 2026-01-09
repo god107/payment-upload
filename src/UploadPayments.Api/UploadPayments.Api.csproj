@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\UploadPayments.Contracts\UploadPayments.Contracts.csproj" />
     <ProjectReference Include="..\UploadPayments.Infrastructure\UploadPayments.Infrastructure.csproj" />
   </ItemGroup>
 

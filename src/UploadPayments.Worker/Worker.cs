@@ -8,13 +8,15 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using UploadPayments.Infrastructure.Persistence;
 using UploadPayments.Infrastructure.Persistence.Entities;
+using UploadPayments.Contracts;
 
 namespace UploadPayments.Worker;
 
 public sealed class Worker(
     ILogger<Worker> logger,
     IServiceScopeFactory scopeFactory,
-    IOptions<ValidationWorkerOptions> optionsAccessor) : BackgroundService
+    IOptions<ValidationWorkerOptions> optionsAccessor,
+    IPaymentUploadNotificationService notificationService) : BackgroundService
 {
     private readonly string _workerId = $"{Environment.MachineName}:{Guid.NewGuid():N}";
     private readonly ValidationWorkerOptions _options = optionsAccessor.Value;
@@ -117,6 +119,9 @@ public sealed class Worker(
         upload.UpdatedAtUtc = now;
         await db.SaveChangesAsync(ct);
 
+        // Notify clients that parsing has started
+        await notificationService.NotifyUploadStatusChanged(upload.Id, upload.Token, "Parsing");
+
         // Skip parsing if already parsed.
         var alreadyHasChunks = await db.PaymentUploadChunks.AnyAsync(x => x.UploadId == upload.Id, ct);
         if (alreadyHasChunks)
@@ -217,6 +222,9 @@ public sealed class Worker(
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Notify clients that validation has started
+        await notificationService.NotifyUploadStatusChanged(upload.Id, upload.Token, "Validating", rowNumber, chunkIndex);
 
         await SucceedJobAsync(db, job, ct);
         logger.LogInformation("Parsed upload {UploadId}: {TotalRows} rows, {Chunks} chunks in {ElapsedMs} ms", upload.Id, rowNumber, chunkIndex, sw.Elapsed.TotalMilliseconds);
@@ -409,6 +417,17 @@ public sealed class Worker(
 
         await db.SaveChangesAsync(ct);
 
+        // Count completed chunks for progress reporting
+        var totalChunks = await db.PaymentUploadChunks.CountAsync(x => x.UploadId == chunk.UploadId, ct);
+        var completedChunks = await db.PaymentUploadChunks.CountAsync(x => x.UploadId == chunk.UploadId && x.Status == ChunkStatus.Succeeded, ct);
+        
+        // Get upload token for notification
+        var uploadForNotification = await db.PaymentUploads.AsNoTracking().FirstOrDefaultAsync(x => x.Id == chunk.UploadId, ct);
+        if (uploadForNotification is not null)
+        {
+            await notificationService.NotifyChunkCompleted(chunk.UploadId, uploadForNotification.Token, chunk.ChunkIndex, processed, succeeded, failed, totalChunks, completedChunks);
+        }
+
         await TryFinalizeUploadAsync(db, chunk.UploadId, ct);
 
         logger.LogInformation(
@@ -469,6 +488,22 @@ public sealed class Worker(
         upload.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+
+        // Notify clients of final status
+        if (upload.Status == UploadStatus.Completed)
+        {
+            await notificationService.NotifyUploadCompleted(
+                upload.Id, 
+                upload.Token, 
+                upload.TotalRows ?? 0, 
+                upload.ProcessedRows, 
+                upload.SucceededRows, 
+                upload.FailedRows);
+        }
+        else
+        {
+            await notificationService.NotifyUploadFailed(upload.Id, upload.Token, upload.LastError ?? "One or more chunks failed");
+        }
     }
 
     private async Task SucceedJobAsync(UploadPaymentsDbContext db, PaymentUploadJob job, CancellationToken ct)
@@ -500,6 +535,11 @@ public sealed class Worker(
                 upload.Status = UploadStatus.Failed;
                 upload.LastError = error;
                 upload.UpdatedAtUtc = DateTime.UtcNow;
+                
+                await db.SaveChangesAsync(ct);
+                
+                // Notify clients of upload failure
+                await notificationService.NotifyUploadFailed(upload.Id, upload.Token, error);
             }
         }
         else

@@ -44,9 +44,11 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+    scale: 5
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__UploadPaymentsDb: Host=db;Port=5432;Database=upload_payments;Username=upload_payments;Password=upload_payments
+      ApiBaseUrl: http://api:8080
       ValidationWorker__PollDelayMilliseconds: 500
       ValidationWorker__ChunkSizeRows: 1000
       ValidationWorker__HeartbeatSeconds: 10
@@ -58,6 +60,20 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
+
+  blazorui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: blazorui
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ApiBaseUrl: http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "5100:8080"
 
 volumes:
   upload_payments_pgdata:

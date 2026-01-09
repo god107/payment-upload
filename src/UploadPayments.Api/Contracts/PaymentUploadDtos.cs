@@ -1,3 +1,6 @@
+// This file has been moved to UploadPayments.Contracts/PaymentUploadDtos.cs
+// Keeping this file for backward compatibility - remove after verifying all references are updated
+
 using System.Collections.Generic;
 
 namespace UploadPayments.Api.Contracts;

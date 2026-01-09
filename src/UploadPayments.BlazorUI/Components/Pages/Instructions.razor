@@ -1,0 +1,156 @@
+@page "/uploads/{UploadIdParam}/instructions/{TokenParam}"
+@using UploadPayments.BlazorUI.Services
+@using UploadPayments.Contracts
+@inject PaymentUploadsApiClient ApiClient
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Payment Instructions</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Payment Instructions</h1>
+            <p class="text-muted mb-0">Upload ID: @UploadIdParam</p>
+        </div>
+        <a href="/uploads/@UploadIdParam/@TokenParam" class="btn btn-outline-secondary">Back to Upload</a>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+    else if (instructionsPage is null)
+    {
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">@instructionsPage.Returned of @(instructionsPage.TotalRows ?? 0) Instructions</h5>
+                
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Row #</th>
+                                <th>Status</th>
+                                <th>Errors</th>
+                                @foreach (var field in GetFieldNames())
+                                {
+                                    <th>@field</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var instruction in instructionsPage.Instructions)
+                            {
+                                <tr class="@GetRowClass(instruction.ValidationStatus)">
+                                    <td>@instruction.RowNumber</td>
+                                    <td><span class="badge bg-@GetStatusBadge(instruction.ValidationStatus)">@instruction.ValidationStatus</span></td>
+                                    <td>
+                                        @if (instruction.ErrorCount > 0)
+                                        {
+                                            <span class="badge bg-danger">@instruction.ErrorCount</span>
+                                        }
+                                    </td>
+                                    @foreach (var field in GetFieldNames())
+                                    {
+                                        <td>@(instruction.Fields.GetValueOrDefault(field) ?? "-")</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (instructionsPage.NextCursorRow.HasValue)
+                {
+                    <button class="btn btn-primary mt-3" @onclick="LoadMore">Load More</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string UploadIdParam { get; set; } = string.Empty;
+    [Parameter] public string TokenParam { get; set; } = string.Empty;
+
+    private PaymentInstructionsPageDto? instructionsPage;
+    private string? errorMessage;
+    private List<string> fieldNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInstructionsAsync();
+    }
+
+    private async Task LoadInstructionsAsync()
+    {
+        try
+        {
+            if (!Guid.TryParse(UploadIdParam, out var uploadId) || !Guid.TryParse(TokenParam, out var token))
+            {
+                errorMessage = "Invalid upload ID or token";
+                return;
+            }
+
+            instructionsPage = await ApiClient.GetPaymentInstructionsAsync(uploadId, token, null, 50);
+            
+            if (instructionsPage?.Instructions.Any() == true)
+            {
+                fieldNames = instructionsPage.Instructions.First().Fields.Keys.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load instructions: {ex.Message}";
+        }
+    }
+
+    private async Task LoadMore()
+    {
+        if (instructionsPage?.NextCursorRow is null) return;
+
+        try
+        {
+            if (!Guid.TryParse(UploadIdParam, out var uploadId) || !Guid.TryParse(TokenParam, out var token))
+                return;
+
+            var nextPage = await ApiClient.GetPaymentInstructionsAsync(uploadId, token, instructionsPage.NextCursorRow, 50);
+            
+            if (nextPage is not null)
+            {
+                var combined = instructionsPage.Instructions.Concat(nextPage.Instructions).ToList();
+                instructionsPage = new PaymentInstructionsPageDto(
+                    instructionsPage.UploadId,
+                    instructionsPage.TotalRows,
+                    instructionsPage.Returned + nextPage.Returned,
+                    nextPage.NextCursorRow,
+                    combined);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load more: {ex.Message}";
+        }
+    }
+
+    private List<string> GetFieldNames() => fieldNames;
+
+    private string GetRowClass(string status) => status switch
+    {
+        "Valid" => "table-success",
+        "Invalid" => "table-danger",
+        _ => ""
+    };
+
+    private string GetStatusBadge(string status) => status switch
+    {
+        "Valid" => "success",
+        "Invalid" => "danger",
+        _ => "secondary"
+    };
+}

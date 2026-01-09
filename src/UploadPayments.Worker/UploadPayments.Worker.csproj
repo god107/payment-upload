@@ -14,11 +14,12 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="System.Net.Http.Json" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\UploadPayments.Application\UploadPayments.Application.csproj" />
+    <ProjectReference Include="..\UploadPayments.Contracts\UploadPayments.Contracts.csproj" />
     <ProjectReference Include="..\UploadPayments.Infrastructure\UploadPayments.Infrastructure.csproj" />
-    <ProjectReference Include="..\UploadPayments.Domain\UploadPayments.Domain.csproj" />
   </ItemGroup>
 </Project>
