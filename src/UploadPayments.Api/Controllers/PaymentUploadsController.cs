@@ -163,9 +163,9 @@ public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : Contr
         [FromQuery] int limit = 200,
         CancellationToken cancellationToken = default)
     {
-        if (limit is < 1 or > 2000)
+        if (limit is < 1 or > 5000)
         {
-            return BadRequest("limit must be between 1 and 2000.");
+            return BadRequest("limit must be between 1 and 5000.");
         }
 
         var uploadExists = await db.PaymentUploads
@@ -216,9 +216,9 @@ public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : Contr
         [FromQuery] int limit = 200,
         CancellationToken cancellationToken = default)
     {
-        if (limit is < 1 or > 2000)
+        if (limit is < 1 or > 5000)
         {
-            return BadRequest("limit must be between 1 and 2000.");
+            return BadRequest("limit must be between 1 and 5000.");
         }
 
         var uploadExists = await db.PaymentUploads
