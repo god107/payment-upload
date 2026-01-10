@@ -87,4 +87,17 @@ public sealed class HttpPaymentUploadNotificationService(HttpClient httpClient, 
             logger.LogWarning(ex, "Failed to send row progress notification for {UploadId} chunk {ChunkIndex}", uploadId, chunkIndex);
         }
     }
+
+    public async Task NotifyUploadDeleted(Guid uploadId, Guid token)
+    {
+        try
+        {
+            var payload = new { uploadId, token };
+            await httpClient.PostAsJsonAsync("/api/notifications/upload-deleted", payload);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send upload deleted notification for {UploadId}", uploadId);
+        }
+    }
 }

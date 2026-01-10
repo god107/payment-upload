@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using UploadPayments.Contracts;
@@ -10,7 +11,10 @@ namespace UploadPayments.Api.Controllers;
 
 [ApiController]
 [Route("api/payment-uploads")]
-public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : ControllerBase
+public sealed class PaymentUploadsController(
+    UploadPaymentsDbContext db,
+    IPaymentUploadNotificationService notificationService,
+    ILogger<PaymentUploadsController> logger) : ControllerBase
 {
     public class UploadRequest
     {
@@ -280,5 +284,47 @@ public sealed class PaymentUploadsController(UploadPaymentsDbContext db) : Contr
         {
             return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    [HttpDelete("{uploadId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Delete(
+        [FromRoute] Guid uploadId,
+        [FromQuery] Guid token,
+        CancellationToken cancellationToken = default)
+    {
+        var upload = await db.PaymentUploads
+            .FirstOrDefaultAsync(x => x.Id == uploadId && x.Token == token, cancellationToken);
+
+        if (upload is null)
+        {
+            return NotFound();
+        }
+
+        // Prevent deletion while upload is being processed
+        if (upload.Status == UploadStatus.Parsing || upload.Status == UploadStatus.Validating)
+        {
+            return BadRequest("Cannot delete upload while it is being processed.");
+        }
+
+        // Track deletion performance
+        var sw = Stopwatch.StartNew();
+        var rowCount = upload.TotalRows;
+
+        db.PaymentUploads.Remove(upload);
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Deleted upload {UploadId} with {TotalRows} rows in {ElapsedMs} ms",
+            uploadId,
+            rowCount,
+            sw.Elapsed.TotalMilliseconds);
+
+        // Notify connected clients
+        await notificationService.NotifyUploadDeleted(uploadId, token);
+
+        return NoContent();
     }
 }

@@ -38,4 +38,9 @@ public interface IPaymentUploadClient
     /// Use sparingly to avoid overwhelming clients.
     /// </summary>
     Task RowProgressUpdate(Guid uploadId, Guid token, int chunkIndex, int processedInChunk, int totalInChunk);
+
+    /// <summary>
+    /// Notifies clients when an upload has been deleted.
+    /// </summary>
+    Task UploadDeleted(Guid uploadId, Guid token);
 }

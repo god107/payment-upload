@@ -70,4 +70,14 @@ public sealed class PaymentUploadNotificationService(IHubContext<PaymentUploadHu
             .Group($"upload_{token}")
             .RowProgressUpdate(uploadId, token, chunkIndex, processedInChunk, totalInChunk);
     }
+
+    /// <summary>
+    /// Notify clients when an upload has been deleted.
+    /// </summary>
+    public async Task NotifyUploadDeleted(Guid uploadId, Guid token)
+    {
+        await hubContext.Clients
+            .Group($"upload_{token}")
+            .UploadDeleted(uploadId, token);
+    }
 }

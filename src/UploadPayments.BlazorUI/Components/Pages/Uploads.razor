@@ -22,6 +22,13 @@
         </div>
     }
 
+    @if (successMessage is not null)
+    {
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle"></i> @successMessage
+        </div>
+    }
+
     @if (isLoading)
     {
         <div class="text-center py-5">
@@ -62,27 +69,27 @@
                         <tbody>
                             @foreach (var upload in uploads)
                             {
-                                <tr style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">
-                                    <td>
+                                <tr>
+                                    <td style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">
                                         <i class="bi bi-file-earmark-spreadsheet text-primary"></i>
                                         <strong>@upload.FileName</strong>
                                     </td>
-                                    <td>
+                                    <td style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">
                                         <span class="badge @GetStatusBadgeClass(upload.Status)">
                                             @upload.Status
                                         </span>
                                     </td>
-                                    <td>
+                                    <td style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">
                                         <small class="text-muted">
                                             @upload.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
                                         </small>
                                     </td>
-                                    <td class="text-end">@(upload.TotalRows?.ToString() ?? "-")</td>
-                                    <td class="text-end">@upload.ProcessedRows</td>
-                                    <td class="text-end">
+                                    <td class="text-end" style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">@(upload.TotalRows?.ToString() ?? "-")</td>
+                                    <td class="text-end" style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">@upload.ProcessedRows</td>
+                                    <td class="text-end" style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">
                                         <span class="text-success">@upload.SucceededRows</span>
                                     </td>
-                                    <td class="text-end">
+                                    <td class="text-end" style="cursor: pointer;" @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)">
                                         @if (upload.FailedRows > 0)
                                         {
                                             <span class="text-danger fw-bold">@upload.FailedRows</span>
@@ -92,8 +99,27 @@
                                             <span class="text-muted">0</span>
                                         }
                                     </td>
-                                    <td class="text-center">
-                                        <i class="bi bi-arrow-right-circle"></i>
+                                    <td class="text-center" @onclick:stopPropagation="true">
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-sm btn-outline-primary" 
+                                                    @onclick="() => NavigateToUpload(upload.UploadId, upload.Token)"
+                                                    title="View Details">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    @onclick="() => ConfirmDelete(upload)"
+                                                    title="Delete"
+                                                    disabled="@(deletingUploadId == upload.UploadId)">
+                                                @if (deletingUploadId == upload.UploadId)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-trash"></i>
+                                                }
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             }
@@ -105,10 +131,39 @@
     }
 </div>
 
+@if (showDeleteConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the upload <strong>@uploadToDelete?.FileName</strong>?</p>
+                    <p class="text-danger mb-0"><i class="bi bi-exclamation-triangle"></i> This will permanently delete all related records including @(uploadToDelete?.TotalRows ?? 0) payment rows and validation results.</p>
+                    <p class="text-muted mb-0">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteUpload">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<UploadListItemDto>? uploads;
     private string? errorMessage;
+    private string? successMessage;
     private bool isLoading = true;
+    private Guid? deletingUploadId;
+    private bool showDeleteConfirmation;
+    private UploadListItemDto? uploadToDelete;
 
     protected override async Task OnInitializedAsync()
     {
@@ -146,5 +201,49 @@
     private void NavigateToUpload(Guid uploadId, Guid token)
     {
         Navigation.NavigateTo($"/uploads/{uploadId}/{token}");
+    }
+
+    private void ConfirmDelete(UploadListItemDto upload)
+    {
+        uploadToDelete = upload;
+        showDeleteConfirmation = true;
+    }
+
+    private void CancelDelete()
+    {
+        uploadToDelete = null;
+        showDeleteConfirmation = false;
+    }
+
+    private async Task DeleteUpload()
+    {
+        if (uploadToDelete == null)
+            return;
+
+        try
+        {
+            deletingUploadId = uploadToDelete.UploadId;
+            showDeleteConfirmation = false;
+
+            await ApiClient.DeleteUploadAsync(uploadToDelete.UploadId, uploadToDelete.Token);
+            
+            successMessage = $"Upload '{uploadToDelete.FileName}' deleted successfully.";
+            uploadToDelete = null;
+
+            // Reload uploads list
+            await LoadUploads();
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("400"))
+        {
+            errorMessage = "Cannot delete upload while it is being processed.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete upload: {ex.Message}";
+        }
+        finally
+        {
+            deletingUploadId = null;
+        }
     }
 }

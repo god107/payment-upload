@@ -16,6 +16,17 @@
         <div class="alert alert-danger">
             <strong>Error:</strong> @errorMessage
         </div>
+    }
+
+    @if (successMessage is not null)
+    {
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle"></i> @successMessage
+        </div>
+    }
+
+    @if (errorMessage is not null && uploadStatus is null)
+    {
         <a href="/" class="btn btn-primary">Back to Home</a>
     }
     else if (uploadStatus is null)
@@ -37,8 +48,21 @@
                 <p class="text-muted small">Created: @uploadStatus.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
             </div>
             <div>
-                <h3><span class="badge bg-@GetStatusBadgeColor(uploadStatus.Status)">@uploadStatus.Status</span></h3>
-            </div>
+                <h3><span class="badge bg-@GetStatusBadgeColor(uploadStatus.Status)">@uploadStatus.Status</span></h3>                <button class="btn btn-outline-danger btn-sm mt-2" 
+                        @onclick="ConfirmDelete"
+                        disabled="@isDeletingUpload"
+                        title="Delete Upload">
+                    @if (isDeletingUpload)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                        <span>Deleting...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-trash"></i>
+                        <span>Delete</span>
+                    }
+                </button>            </div>
         </div>
         
         <div class="row mt-4">
@@ -63,6 +87,31 @@
     }
 </div>
 
+@if (showDeleteConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete this upload?</p>
+                    <p class="text-danger mb-0"><i class="bi bi-exclamation-triangle"></i> This will permanently delete all related records including @(uploadStatus?.TotalRows ?? 0) payment rows and validation results.</p>
+                    <p class="text-muted mb-0">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteUpload">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public string UploadIdParam { get; set; } = string.Empty;
     [Parameter] public string TokenParam { get; set; } = string.Empty;
@@ -70,6 +119,9 @@
     private UploadStatusDto? uploadStatus;
     private HubConnection? hubConnection;
     private string? errorMessage;
+    private string? successMessage;
+    private bool isDeletingUpload;
+    private bool showDeleteConfirmation;
 
     protected override async Task OnInitializedAsync()
     {
@@ -131,6 +183,7 @@
             hubConnection.On<Guid, Guid, int, int, int, int>("UploadCompleted", OnUploadCompleted);
             hubConnection.On<Guid, Guid, string>("UploadFailed", OnUploadFailed);
             hubConnection.On<Guid, Guid, int, int, int>("RowProgressUpdate", OnRowProgressUpdate);
+            hubConnection.On<Guid, Guid>("UploadDeleted", OnUploadDeleted);
 
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("SubscribeToUpload", token.ToString());
@@ -206,6 +259,61 @@
     private double GetProgressPercentage() => uploadStatus?.TotalRows > 0
         ? Math.Round((double)uploadStatus.ProcessedRows / uploadStatus.TotalRows.Value * 100, 1)
         : 0;
+
+    private void ConfirmDelete()
+    {
+        showDeleteConfirmation = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirmation = false;
+    }
+
+    private async Task DeleteUpload()
+    {
+        if (!Guid.TryParse(UploadIdParam, out var uploadId) || !Guid.TryParse(TokenParam, out var token))
+            return;
+
+        try
+        {
+            isDeletingUpload = true;
+            showDeleteConfirmation = false;
+
+            await ApiClient.DeleteUploadAsync(uploadId, token);
+            
+            successMessage = "Upload deleted successfully. Redirecting...";
+            await InvokeAsync(StateHasChanged);
+
+            // Disconnect SignalR before navigation
+            if (hubConnection is not null)
+                await hubConnection.DisposeAsync();
+
+            // Redirect to uploads list
+            await Task.Delay(1000);
+            Navigation.NavigateTo("/uploads");
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("400"))
+        {
+            errorMessage = "Cannot delete upload while it is being processed.";
+            isDeletingUpload = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete upload: {ex.Message}";
+            isDeletingUpload = false;
+        }
+    }
+
+    private async Task OnUploadDeleted(Guid uploadId, Guid token)
+    {
+        // Another client deleted this upload, redirect to uploads list
+        successMessage = "This upload was deleted.";
+        await InvokeAsync(StateHasChanged);
+        
+        await Task.Delay(2000);
+        Navigation.NavigateTo("/uploads");
+    }
 
     public async ValueTask DisposeAsync()
     {

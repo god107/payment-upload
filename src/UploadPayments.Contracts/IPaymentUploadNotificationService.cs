@@ -12,4 +12,5 @@ public interface IPaymentUploadNotificationService
     Task NotifyUploadFailed(Guid uploadId, Guid token, string error);
     Task NotifyChunkFailed(Guid uploadId, Guid token, int chunkIndex, string error, int attemptCount, int maxAttempts);
     Task NotifyRowProgressUpdate(Guid uploadId, Guid token, int chunkIndex, int processedInChunk, int totalInChunk);
+    Task NotifyUploadDeleted(Guid uploadId, Guid token);
 }

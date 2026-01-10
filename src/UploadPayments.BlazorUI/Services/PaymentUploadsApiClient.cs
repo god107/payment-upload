@@ -58,4 +58,11 @@ public sealed class PaymentUploadsApiClient(IHttpClientFactory httpClientFactory
 
     public async Task<PaymentInstructionsPageDto?> GetPaymentInstructionsAsync(Guid uploadId, Guid token, int? cursorRow = null, int limit = 100)
         => await GetInstructionsAsync(uploadId, token, cursorRow, limit);
+
+    public async Task DeleteUploadAsync(Guid uploadId, Guid token)
+    {
+        using var client = CreateClient();
+        var response = await client.DeleteAsync($"/api/payment-uploads/{uploadId}?token={token}");
+        response.EnsureSuccessStatusCode();
+    }
 }
