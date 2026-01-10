@@ -46,3 +46,5 @@ TestResults/
 
 # BenchmarkDotNet
 **/BenchmarkDotNet.Artifacts/
+
+test*.csv
