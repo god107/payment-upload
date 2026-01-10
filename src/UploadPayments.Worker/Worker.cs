@@ -734,8 +734,45 @@ public sealed class Worker(
                         break;
                     }
 
-                    var min = parameters.TryGetValue("min", out var minObj) ? Convert.ToDecimal(minObj, CultureInfo.InvariantCulture) : (decimal?)null;
-                    var max = parameters.TryGetValue("max", out var maxObj) ? Convert.ToDecimal(maxObj, CultureInfo.InvariantCulture) : (decimal?)null;
+                    decimal? min = null;
+                    if (parameters.TryGetValue("min", out var minObj) && minObj is not null)
+                    {
+                        if (minObj is decimal decMin)
+                        {
+                            min = decMin;
+                        }
+                        else if (minObj is double dblMin)
+                        {
+                            min = (decimal)dblMin;
+                        }
+                        else if (minObj is string strMin && !string.IsNullOrWhiteSpace(strMin))
+                        {
+                            if (decimal.TryParse(strMin, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedMin))
+                            {
+                                min = parsedMin;
+                            }
+                        }
+                    }
+
+                    decimal? max = null;
+                    if (parameters.TryGetValue("max", out var maxObj) && maxObj is not null)
+                    {
+                        if (maxObj is decimal decMax)
+                        {
+                            max = decMax;
+                        }
+                        else if (maxObj is double dblMax)
+                        {
+                            max = (decimal)dblMax;
+                        }
+                        else if (maxObj is string strMax && !string.IsNullOrWhiteSpace(strMax))
+                        {
+                            if (decimal.TryParse(strMax, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedMax))
+                            {
+                                max = parsedMax;
+                            }
+                        }
+                    }
 
                     if (min is not null && amount < min)
                     {
